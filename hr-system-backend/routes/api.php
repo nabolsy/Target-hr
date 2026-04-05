@@ -1,0 +1,187 @@
+<?php
+
+use App\Http\Controllers\Api\V1\AnnouncementController;
+use App\Http\Controllers\Api\V1\AssetController;
+use App\Http\Controllers\Api\V1\AttendanceController;
+use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BoardController;
+use App\Http\Controllers\Api\V1\CandidateController;
+use App\Http\Controllers\Api\V1\CompanyBranchController;
+use App\Http\Controllers\Api\V1\CompanyController;
+use App\Http\Controllers\Api\V1\CompanySettingController;
+use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\DepartmentController;
+use App\Http\Controllers\Api\V1\DesignationController;
+use App\Http\Controllers\Api\V1\DocumentController;
+use App\Http\Controllers\Api\V1\EmployeeController;
+use App\Http\Controllers\Api\V1\GoalController;
+use App\Http\Controllers\Api\V1\HolidayController;
+use App\Http\Controllers\Api\V1\InterviewController;
+use App\Http\Controllers\Api\V1\JobOpeningController;
+use App\Http\Controllers\Api\V1\LeaveRequestController;
+use App\Http\Controllers\Api\V1\LeaveTypeController;
+use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\OnboardingChecklistController;
+use App\Http\Controllers\Api\V1\OnboardingTemplateController;
+use App\Http\Controllers\Api\V1\PayrollController;
+use App\Http\Controllers\Api\V1\PerformanceReviewController;
+use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\ReviewCycleController;
+use App\Http\Controllers\Api\V1\SalaryStructureController;
+use App\Http\Controllers\Api\V1\ShiftController;
+use App\Http\Controllers\Api\V1\TaskController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes — /api/v1
+|--------------------------------------------------------------------------
+*/
+
+// ── Auth (public) ────────────────────────────────────────────────────
+Route::post('register', [AuthController::class, 'register']);
+Route::post('login', [AuthController::class, 'login']);
+
+// ── Protected routes ─────────────────────────────────────────────────
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    // Auth
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::get('me', [AuthController::class, 'me']);
+
+    // Dashboard
+    Route::get('dashboard', [DashboardController::class, 'companyDashboard']);
+    Route::get('dashboard/super-admin', [DashboardController::class, 'superAdminDashboard']);
+
+    // Companies
+    Route::apiResource('companies', CompanyController::class);
+    Route::patch('companies/{company}/status', [CompanyController::class, 'updateStatus'])
+        ->name('companies.update-status');
+
+    // Company Settings
+    Route::get('settings', [CompanySettingController::class, 'show']);
+    Route::put('settings', [CompanySettingController::class, 'update']);
+
+    // Company Branches
+    Route::apiResource('branches', CompanyBranchController::class);
+
+    // Departments & Designations
+    Route::apiResource('departments', DepartmentController::class);
+    Route::apiResource('designations', DesignationController::class);
+
+    // Employees
+    Route::patch('employees/{employee}/status', [EmployeeController::class, 'updateStatus'])
+        ->name('employees.update-status');
+    Route::apiResource('employees', EmployeeController::class);
+
+    // Attendance
+    Route::post('attendance/check-in', [AttendanceController::class, 'checkIn']);
+    Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);
+    Route::get('attendance/monthly-report', [AttendanceController::class, 'monthlyReport']);
+    Route::post('attendance/request-adjustment', [AttendanceController::class, 'requestAdjustment']);
+    Route::post('attendance/{adjustment}/approve', [AttendanceController::class, 'approveAdjustment']);
+    Route::post('attendance/{adjustment}/reject', [AttendanceController::class, 'rejectAdjustment']);
+    Route::apiResource('attendance', AttendanceController::class)->only(['index', 'show']);
+    Route::apiResource('shifts', ShiftController::class);
+
+    // Leave Management
+    Route::post('leave-requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve'])
+        ->name('leave-requests.approve');
+    Route::post('leave-requests/{leaveRequest}/reject', [LeaveRequestController::class, 'reject'])
+        ->name('leave-requests.reject');
+    Route::post('leave-requests/{leaveRequest}/cancel', [LeaveRequestController::class, 'cancel'])
+        ->name('leave-requests.cancel');
+    Route::get('leave-balance/{employee}', [LeaveRequestController::class, 'balance'])
+        ->name('leave-requests.balance');
+    Route::apiResource('leave-requests', LeaveRequestController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('leave-types', LeaveTypeController::class);
+    Route::apiResource('holidays', HolidayController::class);
+
+    // Documents
+    Route::get('documents/{document}/download', [DocumentController::class, 'download'])
+        ->name('documents.download');
+    Route::apiResource('documents', DocumentController::class);
+
+    // Task Board (Kanban)
+    Route::post('boards/{board}/archive', [BoardController::class, 'archive'])->name('boards.archive');
+    Route::apiResource('boards', BoardController::class);
+    Route::get('tasks/my-tasks', [TaskController::class, 'myTasks'])->name('tasks.my-tasks');
+    Route::patch('tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
+    Route::post('tasks/{task}/assign', [TaskController::class, 'assign'])->name('tasks.assign');
+    Route::delete('tasks/{task}/assignees/{employee}', [TaskController::class, 'removeAssignee'])
+        ->name('tasks.remove-assignee');
+    Route::post('tasks/{task}/comments', [TaskController::class, 'addComment'])->name('tasks.add-comment');
+    Route::apiResource('tasks', TaskController::class);
+
+    // Announcements
+    Route::patch('announcements/{announcement}/publish', [AnnouncementController::class, 'publish']);
+    Route::post('announcements/{announcement}/read', [AnnouncementController::class, 'markAsRead']);
+    Route::post('announcements/{announcement}/acknowledge', [AnnouncementController::class, 'acknowledge']);
+    Route::apiResource('announcements', AnnouncementController::class);
+
+    // Performance Reviews
+    Route::post('performance-reviews/{performanceReview}/submit', [PerformanceReviewController::class, 'submit']);
+    Route::post('performance-reviews/{performanceReview}/acknowledge', [PerformanceReviewController::class, 'acknowledge']);
+    Route::apiResource('performance-reviews', PerformanceReviewController::class)->only(['index', 'store', 'show']);
+    Route::patch('review-cycles/{reviewCycle}/activate', [ReviewCycleController::class, 'activate']);
+    Route::patch('review-cycles/{reviewCycle}/complete', [ReviewCycleController::class, 'complete']);
+    Route::apiResource('review-cycles', ReviewCycleController::class);
+    Route::patch('goals/{goal}/progress', [GoalController::class, 'updateProgress']);
+    Route::apiResource('goals', GoalController::class);
+
+    // Recruitment
+    Route::get('job-openings/{jobOpening}/candidates', [JobOpeningController::class, 'candidates']);
+    Route::apiResource('job-openings', JobOpeningController::class);
+    Route::patch('candidates/{candidate}/move-stage', [CandidateController::class, 'moveStage']);
+    Route::post('candidates/{candidate}/hire', [CandidateController::class, 'hire']);
+    Route::post('candidates/{candidate}/reject', [CandidateController::class, 'reject']);
+    Route::apiResource('candidates', CandidateController::class);
+    Route::post('interviews/{interview}/feedback', [InterviewController::class, 'submitFeedback']);
+    Route::apiResource('interviews', InterviewController::class);
+
+    // Onboarding / Offboarding
+    Route::apiResource('onboarding-templates', OnboardingTemplateController::class);
+    Route::get('onboarding-checklists/employee/{employee}', [OnboardingChecklistController::class, 'getByEmployee']);
+    Route::post('onboarding-checklists/{checklist}/complete-offboarding', [OnboardingChecklistController::class, 'completeOffboarding']);
+    Route::post('onboarding-checklists/items/{item}/complete', [OnboardingChecklistController::class, 'completeItem']);
+    Route::apiResource('onboarding-checklists', OnboardingChecklistController::class)->only(['index', 'store', 'show']);
+
+    // Asset Management
+    Route::get('assets/employee/{employee}', [AssetController::class, 'byEmployee']);
+    Route::post('assets/{asset}/assign', [AssetController::class, 'assign']);
+    Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset']);
+    Route::get('assets/{asset}/history', [AssetController::class, 'history']);
+    Route::apiResource('assets', AssetController::class);
+
+    // Payroll
+    Route::get('salary-structures/{employee}', [SalaryStructureController::class, 'show']);
+    Route::post('salary-structures', [SalaryStructureController::class, 'store']);
+    Route::put('salary-structures/{employee}', [SalaryStructureController::class, 'update']);
+    Route::post('payroll/generate', [PayrollController::class, 'generate']);
+    Route::post('payroll/{payrollPeriod}/lock', [PayrollController::class, 'lock']);
+    Route::get('payroll/{payrollPeriod}/export', [PayrollController::class, 'export']);
+    Route::get('payroll/{payrollPeriod}', [PayrollController::class, 'show']);
+    Route::get('payroll', [PayrollController::class, 'index']);
+
+    // Reports
+    Route::prefix('reports')->group(function () {
+        Route::get('employees', [ReportController::class, 'employeeReport']);
+        Route::get('attendance', [ReportController::class, 'attendanceReport']);
+        Route::get('leave', [ReportController::class, 'leaveReport']);
+        Route::get('tasks', [ReportController::class, 'taskReport']);
+        Route::get('overdue-tasks', [ReportController::class, 'overdueTaskReport']);
+        Route::get('document-expiry', [ReportController::class, 'documentExpiryReport']);
+    });
+
+    // Notifications
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::delete('notifications/{notification}', [NotificationController::class, 'destroy']);
+
+    // Audit Logs
+    Route::get('audit-logs', [AuditLogController::class, 'index']);
+    Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
+});
