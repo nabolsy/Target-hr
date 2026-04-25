@@ -34,8 +34,26 @@ class LeaveService extends BaseService
     public function applyForLeave(LeaveRequestDTO $dto): LeaveRequest
     {
         return DB::transaction(function () use ($dto) {
+            // Guard half-day requests against leave types that don't
+            // allow them. We do this BEFORE touching the balance so
+            // the caller gets a clear validation error instead of a
+            // cryptic balance failure.
+            if ($dto->isHalfDay) {
+                $leaveType = \App\Models\LeaveType::find($dto->leaveTypeId);
+                if ($leaveType && ! $leaveType->allows_half_day) {
+                    throw new BusinessException(
+                        "Half-day leave is not allowed for {$leaveType->name}."
+                    );
+                }
+            }
+
+            // Half-day requests must be a single date — if the client
+            // sent a range we silently collapse it to the start so the
+            // server is the source of truth for the invariant.
+            $effectiveEndDate = $dto->isHalfDay ? $dto->startDate : $dto->endDate;
+
             $startDate = Carbon::parse($dto->startDate);
-            $endDate = Carbon::parse($dto->endDate);
+            $endDate = Carbon::parse($effectiveEndDate);
 
             if ($endDate->lt($startDate)) {
                 throw new BusinessException('End date must be on or after start date.');
@@ -45,7 +63,7 @@ class LeaveService extends BaseService
             $conflicts = $this->leaveRequestRepository->getConflicting(
                 $dto->employeeId,
                 $dto->startDate,
-                $dto->endDate
+                $effectiveEndDate
             );
 
             if ($conflicts->isNotEmpty()) {
@@ -86,8 +104,9 @@ class LeaveService extends BaseService
                 'employee_id' => $dto->employeeId,
                 'leave_type_id' => $dto->leaveTypeId,
                 'start_date' => $dto->startDate,
-                'end_date' => $dto->endDate,
+                'end_date' => $effectiveEndDate,
                 'is_half_day' => $dto->isHalfDay,
+                'duration_type' => $dto->durationType,
                 'total_days' => $totalDays,
                 'reason' => $dto->reason,
                 'attachment_path' => $dto->attachmentPath,

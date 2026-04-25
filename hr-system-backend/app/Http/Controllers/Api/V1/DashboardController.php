@@ -14,13 +14,17 @@ class DashboardController extends Controller
 
     public function companyDashboard(): JsonResponse
     {
-        $companyId = auth()->user()->company_id;
+        $user = auth()->user();
+        $companyId = $user->company_id;
 
         if (! $companyId) {
             return response()->json(['message' => 'No company associated with this user.'], 403);
         }
 
-        $data = $this->dashboardService->getCompanyDashboard($companyId);
+        // Pass the user so DashboardService can apply per-role scope.
+        // Company Admin / HR Manager still get the full company view;
+        // Department Manager / Employee see their subtree only.
+        $data = $this->dashboardService->getCompanyDashboard($companyId, $user);
 
         return response()->json(['data' => $data]);
     }

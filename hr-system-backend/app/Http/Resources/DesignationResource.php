@@ -12,9 +12,17 @@ class DesignationResource extends JsonResource
         return [
             'id' => $this->id,
             'company_id' => $this->company_id,
+            'department_id' => $this->department_id,
+            'department' => $this->whenLoaded('department', fn () => $this->department ? [
+                'id' => $this->department->id,
+                'name' => $this->department->name,
+            ] : null),
             'name' => $this->name,
+            'name_ar' => $this->name_ar,
             'description' => $this->description,
             'level' => $this->level,
+            'grade' => $this->grade,
+            'is_active' => (bool) ($this->is_active ?? true),
             'employees_count' => $this->whenCounted('employees'),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

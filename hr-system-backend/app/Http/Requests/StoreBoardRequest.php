@@ -18,6 +18,7 @@ class StoreBoardRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'type' => ['required', new Enum(BoardType::class)],
         ];

@@ -34,6 +34,12 @@ class AuthController extends Controller
     {
         $result = $this->authService->login(LoginDTO::fromArray($request->validated()));
 
+        // Eager-load roles + permissions so the UserResource returns a
+        // populated permissions array on first response — avoids N+1
+        // queries inside the resource and lights up AuthContext.can() on
+        // the frontend immediately after login.
+        $result['user']->load(['company', 'roles', 'permissions']);
+
         return response()->json([
             'message' => 'Login successful.',
             'data' => new UserResource($result['user']),
@@ -50,6 +56,8 @@ class AuthController extends Controller
 
     public function me(Request $request): UserResource
     {
-        return new UserResource($request->user()->load('company'));
+        return new UserResource(
+            $request->user()->load(['company', 'roles', 'permissions'])
+        );
     }
 }

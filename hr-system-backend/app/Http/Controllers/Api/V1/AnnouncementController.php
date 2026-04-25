@@ -8,7 +8,9 @@ use App\Http\Requests\StoreAnnouncementRequest;
 use App\Http\Requests\UpdateAnnouncementRequest;
 use App\Http\Resources\AnnouncementResource;
 use App\Models\Announcement;
+use App\Services\Access\PermissionService;
 use App\Services\AnnouncementService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,17 +18,36 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AnnouncementController extends Controller
 {
-    public function __construct(private AnnouncementService $announcementService)
-    {
+    public function __construct(
+        private AnnouncementService $announcementService,
+        private PermissionService $permissions,
+    ) {
     }
 
     public function index(Request $request): AnonymousResourceCollection
     {
+        $user = $request->user();
+
+        if (! $this->permissions->can($user, 'announcement.view')) {
+            throw new AuthorizationException('You are not allowed to view announcements.');
+        }
+
+        $filters = $request->only([
+            'company_id', 'department_id', 'type', 'is_pinned',
+            'status', 'search', 'sort_by', 'sort_dir',
+        ]);
+
+        if ($user && $user->company_id) {
+            $filters['company_id'] = $user->company_id;
+        }
+
+        // Scope: announcements with NULL department_id are always visible;
+        // anything else must be in the user's visible department set.
+        $filters['__visible_department_ids'] = $this->permissions
+            ->visibleDepartmentIds($user, 'announcement.view');
+
         $announcements = $this->announcementService->paginateWithFilters(
-            $request->only([
-                'company_id', 'department_id', 'type', 'is_pinned',
-                'status', 'search', 'sort_by', 'sort_dir',
-            ]),
+            $filters,
             $request->integer('per_page', 15)
         );
 

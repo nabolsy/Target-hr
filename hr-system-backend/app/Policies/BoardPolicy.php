@@ -6,12 +6,35 @@ use App\Enums\UserRole;
 use App\Models\Board;
 use App\Models\Employee;
 use App\Models\User;
+use App\Services\Access\PermissionService;
 
+/**
+ * Board authorization via PermissionService.
+ *
+ * Read rules (via board.view):
+ *   - company scope  → all boards in the company
+ *   - managed_department / own_department → boards whose department_id
+ *     is in the user's visible set, PLUS boards with NULL department_id
+ *     (company-wide boards visible to everyone), PLUS boards where the
+ *     user's employee record is an explicit board_members pivot row.
+ *   - no permission → 0 boards.
+ *
+ * Write rules (via board.manage):
+ *   - company scope → can create/update/delete/archive any company board
+ *   - managed_department / own_department → only within the user's
+ *     visible department set. Editing a company-wide (NULL department)
+ *     board requires company scope.
+ *
+ * Kept backwards compatible: the SuperAdmin before() shortcut stays, and
+ * the legacy UserRole enum column is still the canonical role source for
+ * RoleMiddleware and other callers.
+ */
 class BoardPolicy
 {
-    /**
-     * SuperAdmin can do everything.
-     */
+    public function __construct(private PermissionService $permissions)
+    {
+    }
+
     public function before(User $user, string $ability): ?bool
     {
         if ($user->role === UserRole::SuperAdmin) {
@@ -23,40 +46,44 @@ class BoardPolicy
 
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::CompanyAdmin,
-            UserRole::HrManager,
-            UserRole::DepartmentManager,
-            UserRole::Employee,
-        ]);
+        return $this->permissions->can($user, 'board.view');
     }
 
     public function view(User $user, Board $board): bool
     {
-        // CompanyAdmin and HrManager can view boards in their company
-        if (
-            in_array($user->role, [UserRole::CompanyAdmin, UserRole::HrManager])
-            && (int) $user->company_id === (int) $board->company_id
-        ) {
+        if ((int) $user->company_id !== (int) $board->company_id) {
+            return false;
+        }
+
+        $scope = $this->permissions->getScope($user, 'board.view');
+        if ($scope === null) {
+            return false;
+        }
+        if ($scope === 'company') {
             return true;
         }
 
-        // DepartmentManager can view boards for their department or company-wide boards
-        if ($user->role === UserRole::DepartmentManager) {
-            $managerEmployee = Employee::where('user_id', $user->id)->first();
-            if ($managerEmployee) {
-                return (int) $user->company_id === (int) $board->company_id
-                    && ($board->department_id === null || (int) $managerEmployee->department_id === (int) $board->department_id);
-            }
+        // Company-wide boards (NULL department_id) are visible to anyone
+        // with any level of board.view permission.
+        if ($board->department_id === null) {
+            return true;
         }
 
-        // Employee can view boards in their company (company-wide or their department)
-        if ($user->role === UserRole::Employee) {
-            $employee = Employee::where('user_id', $user->id)->first();
-            if ($employee) {
-                return (int) $user->company_id === (int) $board->company_id
-                    && ($board->department_id === null || (int) $employee->department_id === (int) $board->department_id);
-            }
+        // Department-scoped board: the department must be in the user's
+        // visible set.
+        $visible = $this->permissions->visibleDepartmentIds($user, 'board.view');
+        if ($visible === null) {
+            return true;
+        }
+        if (in_array((int) $board->department_id, $visible, true)) {
+            return true;
+        }
+
+        // Fallback: the user is an explicit member of the board via the
+        // board_members pivot (added in an earlier session).
+        $employeeId = $this->permissions->employeeIdForSelf($user);
+        if ($employeeId && $board->members()->where('employees.id', $employeeId)->exists()) {
+            return true;
         }
 
         return false;
@@ -64,33 +91,36 @@ class BoardPolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::CompanyAdmin,
-            UserRole::HrManager,
-            UserRole::DepartmentManager,
-        ]);
+        return $this->permissions->can($user, 'board.manage');
     }
 
     public function update(User $user, Board $board): bool
     {
-        if (
-            in_array($user->role, [UserRole::CompanyAdmin, UserRole::HrManager])
-            && (int) $user->company_id === (int) $board->company_id
-        ) {
+        if ((int) $user->company_id !== (int) $board->company_id) {
+            return false;
+        }
+
+        $scope = $this->permissions->getScope($user, 'board.manage');
+        if ($scope === null) {
+            return false;
+        }
+        if ($scope === 'company') {
             return true;
         }
 
-        // DepartmentManager can update own department boards
-        if ($user->role === UserRole::DepartmentManager) {
-            $managerEmployee = Employee::where('user_id', $user->id)->first();
-            if ($managerEmployee && $board->department_id
-                && (int) $managerEmployee->department_id === (int) $board->department_id
-            ) {
-                return true;
-            }
+        // Updating a company-wide board requires company scope — a
+        // department manager cannot edit a board that belongs to no
+        // specific department.
+        if ($board->department_id === null) {
+            return false;
         }
 
-        return false;
+        $visible = $this->permissions->visibleDepartmentIds($user, 'board.manage');
+        if ($visible === null) {
+            return true;
+        }
+
+        return in_array((int) $board->department_id, $visible, true);
     }
 
     public function delete(User $user, Board $board): bool
@@ -99,6 +129,24 @@ class BoardPolicy
     }
 
     public function archive(User $user, Board $board): bool
+    {
+        return $this->update($user, $board);
+    }
+
+    /**
+     * Managing board members (add/remove employees from the board_members
+     * pivot) is a manage-level write.
+     */
+    public function manageMembers(User $user, Board $board): bool
+    {
+        return $this->update($user, $board);
+    }
+
+    /**
+     * Managing columns (create/rename/archive/restore/delete) is a
+     * manage-level write on the parent board.
+     */
+    public function manageColumns(User $user, Board $board): bool
     {
         return $this->update($user, $board);
     }

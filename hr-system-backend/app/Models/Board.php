@@ -7,6 +7,7 @@ use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -19,6 +20,7 @@ class Board extends Model
         'company_id',
         'name',
         'description',
+        'color',
         'department_id',
         'type',
         'is_archived',
@@ -53,6 +55,13 @@ class Board extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(Employee::class, 'board_members')
+            ->withPivot(['added_at', 'added_by'])
+            ->withTimestamps();
     }
 
     // Scopes

@@ -28,6 +28,68 @@ class BoardService extends BaseService
         return $this->boardRepository->getByDepartment($departmentId);
     }
 
+    /**
+     * Return the boards visible to the given user in their own company,
+     * honouring the board.view permission scope.
+     *
+     * Visibility rules:
+     *   - Super Admin / company scope → every board in the company.
+     *   - Dept Manager / Team Lead / Employee → boards whose `department_id`
+     *     is in the user's visible-department set, PLUS boards with a
+     *     NULL department_id (company-wide boards that are visible to
+     *     everyone), PLUS boards where the user's employee record is an
+     *     explicit member via the board_members pivot.
+     *   - No board.view permission → empty collection.
+     *
+     * This is the canonical hook BoardController::index calls so that
+     * Kanban drag-drop, columns, members, and attachments all keep working
+     * unchanged — only the list of boards returned by /api/v1/boards is
+     * restricted.
+     */
+    public function getVisibleForUser(\App\Models\User $user): Collection
+    {
+        $permissions = app(\App\Services\Access\PermissionService::class);
+
+        if (! $permissions->can($user, 'board.view')) {
+            return Board::whereRaw('1 = 0')->get();
+        }
+
+        $visibleDepartmentIds = $permissions->visibleDepartmentIds($user, 'board.view');
+        $companyId = $user->company_id;
+
+        $query = Board::where('company_id', $companyId)
+            ->where('is_archived', false)
+            ->with('department:id,name,name_ar,code')
+            ->withCount(['tasks', 'members'])
+            ->orderByDesc('created_at');
+
+        if ($visibleDepartmentIds === null) {
+            // Company scope: no filter.
+            return $query->get();
+        }
+
+        // Limited scope: any board whose department_id is in the visible
+        // set OR whose department_id is NULL OR where the user is an
+        // explicit board member.
+        $employeeId = $permissions->employeeIdForSelf($user);
+
+        $query->where(function ($q) use ($visibleDepartmentIds, $employeeId) {
+            $q->whereNull('department_id');
+
+            if (! empty($visibleDepartmentIds)) {
+                $q->orWhereIn('department_id', $visibleDepartmentIds);
+            }
+
+            if ($employeeId) {
+                $q->orWhereHas('members', function ($m) use ($employeeId) {
+                    $m->where('employees.id', $employeeId);
+                });
+            }
+        });
+
+        return $query->get();
+    }
+
     public function getWithColumns(int $boardId): Model
     {
         return $this->boardRepository->getWithColumns($boardId);

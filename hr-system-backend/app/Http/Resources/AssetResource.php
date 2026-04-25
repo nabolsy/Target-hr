@@ -22,8 +22,8 @@ class AssetResource extends JsonResource
             'purchase_cost' => $this->purchase_cost,
             'condition' => $this->condition?->value,
             'condition_label' => $this->condition?->label(),
-            'status' => $this->status->value,
-            'status_label' => $this->status->label(),
+            'status' => $this->status?->value,
+            'status_label' => $this->status?->label(),
             'location' => $this->location,
             'notes' => $this->notes,
 

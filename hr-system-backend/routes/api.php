@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\ReviewCycleController;
 use App\Http\Controllers\Api\V1\SalaryStructureController;
 use App\Http\Controllers\Api\V1\ShiftController;
 use App\Http\Controllers\Api\V1\TaskController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -40,19 +41,37 @@ use Illuminate\Support\Facades\Route;
 */
 
 // ── Auth (public) ────────────────────────────────────────────────────
-Route::post('register', [AuthController::class, 'register']);
-Route::post('login', [AuthController::class, 'login']);
+Route::post('auth/register', [AuthController::class, 'register']);
+Route::post('auth/login', [AuthController::class, 'login']);
+Route::post('auth/forgot-password', [\App\Http\Controllers\Api\V1\ForgotPasswordController::class, 'sendResetLink']);
+Route::post('auth/reset-password', [\App\Http\Controllers\Api\V1\ForgotPasswordController::class, 'resetPassword']);
 
 // ── Protected routes ─────────────────────────────────────────────────
 Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth
     Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
+    Route::get('auth/me', [AuthController::class, 'me']);
 
     // Dashboard
     Route::get('dashboard', [DashboardController::class, 'companyDashboard']);
     Route::get('dashboard/super-admin', [DashboardController::class, 'superAdminDashboard']);
+
+    // User Account Management
+    Route::get('users', [\App\Http\Controllers\Api\V1\UserController::class, 'index']);
+    Route::post('users', [\App\Http\Controllers\Api\V1\UserController::class, 'store']);
+    Route::put('users/{user}', [\App\Http\Controllers\Api\V1\UserController::class, 'update']);
+    Route::post('users/{user}/reset-password', [\App\Http\Controllers\Api\V1\UserController::class, 'resetPassword']);
+    Route::delete('users/{user}', [\App\Http\Controllers\Api\V1\UserController::class, 'destroy']);
+
+    // Roles & Permissions (System Management)
+    Route::get('permissions', [\App\Http\Controllers\Api\V1\PermissionController::class, 'index']);
+    Route::get('roles', [\App\Http\Controllers\Api\V1\RoleController::class, 'index']);
+    Route::post('roles', [\App\Http\Controllers\Api\V1\RoleController::class, 'store']);
+    Route::put('roles/{role}', [\App\Http\Controllers\Api\V1\RoleController::class, 'update']);
+    Route::delete('roles/{role}', [\App\Http\Controllers\Api\V1\RoleController::class, 'destroy']);
 
     // Companies
     Route::apiResource('companies', CompanyController::class);
@@ -67,12 +86,24 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('branches', CompanyBranchController::class);
 
     // Departments & Designations
+    // Departments — tree + manager + status + stats endpoints registered
+    // before apiResource so /departments/tree and /departments/{id}/stats
+    // are not swallowed by the generic {department} param binding.
+    Route::get('departments/tree', [DepartmentController::class, 'tree'])->name('departments.tree');
+    Route::get('departments/{department}/stats', [DepartmentController::class, 'stats'])->name('departments.stats');
+    Route::patch('departments/{department}/status', [DepartmentController::class, 'toggleStatus'])->name('departments.toggle-status');
+    Route::post('departments/{department}/manager', [DepartmentController::class, 'assignManager'])->name('departments.assign-manager');
+    Route::delete('departments/{department}/manager', [DepartmentController::class, 'removeManager'])->name('departments.remove-manager');
     Route::apiResource('departments', DepartmentController::class);
     Route::apiResource('designations', DesignationController::class);
 
     // Employees
     Route::patch('employees/{employee}/status', [EmployeeController::class, 'updateStatus'])
         ->name('employees.update-status');
+    // Peek-ahead helper MUST register before the apiResource so it
+    // isn't swallowed by the {employee} wildcard.
+    Route::get('employees/next-id-number', [EmployeeController::class, 'nextIdNumber'])
+        ->name('employees.next-id-number');
     Route::apiResource('employees', EmployeeController::class);
 
     // Attendance
@@ -94,8 +125,38 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->name('leave-requests.cancel');
     Route::get('leave-balance/{employee}', [LeaveRequestController::class, 'balance'])
         ->name('leave-requests.balance');
+    // One-shot profile widget: balances + recent + upcoming + totals.
+    Route::get('employees/{employee}/leave-summary', [LeaveRequestController::class, 'summary'])
+        ->name('employees.leave-summary');
     Route::apiResource('leave-requests', LeaveRequestController::class)->only(['index', 'store', 'show']);
     Route::apiResource('leave-types', LeaveTypeController::class);
+
+    // Leave balances — canonical plural form. The index endpoint takes
+    // an employee_id query param; the update endpoint lets admins adjust
+    // an allotment manually (company-scope leave.approve required).
+    Route::get('leave-balances', [\App\Http\Controllers\Api\V1\LeaveBalanceController::class, 'index'])
+        ->name('leave-balances.index');
+    Route::put('leave-balances/{leaveBalance}', [\App\Http\Controllers\Api\V1\LeaveBalanceController::class, 'update'])
+        ->name('leave-balances.update');
+
+    // Frontend path aliases
+    Route::get('leave/types', [LeaveTypeController::class, 'index']);
+    Route::get('leave/requests', [LeaveRequestController::class, 'index']);
+    Route::post('leave/requests', [LeaveRequestController::class, 'store']);
+    Route::get('leave/requests/{leaveRequest}', [LeaveRequestController::class, 'show']);
+    Route::post('leave/requests/{leaveRequest}/approve', [LeaveRequestController::class, 'approve']);
+    Route::post('leave/requests/{leaveRequest}/reject', [LeaveRequestController::class, 'reject']);
+    Route::post('leave/requests/{leaveRequest}/cancel', [LeaveRequestController::class, 'cancel']);
+    Route::delete('leave/requests/{leaveRequest}', [LeaveRequestController::class, 'cancel']);
+
+    // Current user's leave balances (frontend calls without an employee id)
+    Route::get('leave/balances', function (Request $request) {
+        $employee = \App\Models\Employee::where('user_id', $request->user()->id)->first();
+        if (! $employee) {
+            return response()->json(['data' => []]);
+        }
+        return app(LeaveRequestController::class)->balance($request, $employee->id);
+    });
     Route::apiResource('holidays', HolidayController::class);
 
     // Documents
@@ -105,6 +166,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Task Board (Kanban)
     Route::post('boards/{board}/archive', [BoardController::class, 'archive'])->name('boards.archive');
+
+    // Board members
+    Route::get('boards/{board}/members', [\App\Http\Controllers\Api\V1\BoardMemberController::class, 'index']);
+    Route::post('boards/{board}/members', [\App\Http\Controllers\Api\V1\BoardMemberController::class, 'store']);
+    Route::delete('boards/{board}/members/{employee}', [\App\Http\Controllers\Api\V1\BoardMemberController::class, 'destroy']);
+
+    // Board lists (columns)
+    Route::get('boards/{board}/columns', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'index']);
+    Route::post('boards/{board}/columns', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'store']);
+    Route::put('board-columns/{column}', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'update']);
+    Route::post('board-columns/{column}/archive', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'archive']);
+    Route::post('board-columns/{column}/restore', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'restore']);
+    Route::delete('board-columns/{column}', [\App\Http\Controllers\Api\V1\BoardColumnController::class, 'destroy']);
+
     Route::apiResource('boards', BoardController::class);
     Route::get('tasks/my-tasks', [TaskController::class, 'myTasks'])->name('tasks.my-tasks');
     Route::patch('tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
@@ -112,6 +187,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('tasks/{task}/assignees/{employee}', [TaskController::class, 'removeAssignee'])
         ->name('tasks.remove-assignee');
     Route::post('tasks/{task}/comments', [TaskController::class, 'addComment'])->name('tasks.add-comment');
+
+    // Task attachments
+    Route::get('tasks/{task}/attachments', [\App\Http\Controllers\Api\V1\TaskAttachmentController::class, 'index']);
+    Route::post('tasks/{task}/attachments', [\App\Http\Controllers\Api\V1\TaskAttachmentController::class, 'store']);
+    Route::get('tasks/{task}/attachments/{attachment}/download', [\App\Http\Controllers\Api\V1\TaskAttachmentController::class, 'download']);
+    Route::delete('tasks/{task}/attachments/{attachment}', [\App\Http\Controllers\Api\V1\TaskAttachmentController::class, 'destroy']);
+
     Route::apiResource('tasks', TaskController::class);
 
     // Announcements
@@ -180,8 +262,46 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('notifications/{notification}', [NotificationController::class, 'destroy']);
+    // Send a targeted notification to one or more users / employees /
+    // departments. Permission-gated inside the controller.
+    Route::post('notifications', [NotificationController::class, 'store']);
 
     // Audit Logs
     Route::get('audit-logs', [AuditLogController::class, 'index']);
     Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
+
+    // Billing & Payments
+    Route::get('my/subscription', [\App\Http\Controllers\Api\V1\BillingController::class, 'subscription']);
+    Route::get('my/invoices', [\App\Http\Controllers\Api\V1\BillingController::class, 'invoices']);
+    Route::get('billing/plans', [\App\Http\Controllers\Api\V1\BillingController::class, 'plans']);
+    Route::post('payments/initiate', [\App\Http\Controllers\Api\V1\BillingController::class, 'initiatePayment']);
+    Route::get('payments/verify/{id}', [\App\Http\Controllers\Api\V1\BillingController::class, 'verifyPayment']);
+    Route::post('subscription/cancel', [\App\Http\Controllers\Api\V1\BillingController::class, 'cancelSubscription']);
+});
+
+// ── Public Routes (no auth) ──────────────────────────────────────────
+Route::get('plans', \App\Http\Controllers\Api\V1\PublicPlanController::class);
+Route::post('register', \App\Http\Controllers\Api\V1\RegistrationController::class);
+
+// ── Super Admin Routes ───────────────────────────────────────────────
+Route::prefix('super-admin')->middleware(['auth:sanctum', 'role:super_admin'])->group(function () {
+    Route::get('dashboard', \App\Http\Controllers\Api\V1\SuperAdmin\DashboardController::class);
+
+    Route::get('plans', [\App\Http\Controllers\Api\V1\SuperAdmin\PlanController::class, 'index']);
+    Route::post('plans', [\App\Http\Controllers\Api\V1\SuperAdmin\PlanController::class, 'store']);
+    Route::get('plans/{plan}', [\App\Http\Controllers\Api\V1\SuperAdmin\PlanController::class, 'show']);
+    Route::put('plans/{plan}', [\App\Http\Controllers\Api\V1\SuperAdmin\PlanController::class, 'update']);
+    Route::delete('plans/{plan}', [\App\Http\Controllers\Api\V1\SuperAdmin\PlanController::class, 'destroy']);
+
+    Route::get('companies', [\App\Http\Controllers\Api\V1\SuperAdmin\CompanyManagementController::class, 'index']);
+    Route::get('companies/{company}', [\App\Http\Controllers\Api\V1\SuperAdmin\CompanyManagementController::class, 'show']);
+    Route::put('companies/{company}', [\App\Http\Controllers\Api\V1\SuperAdmin\CompanyManagementController::class, 'update']);
+    Route::get('companies/{company}/stats', [\App\Http\Controllers\Api\V1\SuperAdmin\CompanyManagementController::class, 'stats']);
+    Route::post('companies/{company}/change-plan', [\App\Http\Controllers\Api\V1\SuperAdmin\CompanyManagementController::class, 'changePlan']);
+
+    Route::get('subscriptions', [\App\Http\Controllers\Api\V1\SuperAdmin\SubscriptionManagementController::class, 'index']);
+    Route::put('subscriptions/{subscription}', [\App\Http\Controllers\Api\V1\SuperAdmin\SubscriptionManagementController::class, 'update']);
+
+    Route::get('payments', [\App\Http\Controllers\Api\V1\SuperAdmin\PaymentManagementController::class, 'index']);
+    Route::get('payments/{payment}', [\App\Http\Controllers\Api\V1\SuperAdmin\PaymentManagementController::class, 'show']);
 });

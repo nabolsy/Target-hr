@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Task;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\TaskRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,8 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class TaskRepository extends BaseRepository implements TaskRepositoryInterface
 {
+    use AppliesAccessScope;
+
     public function __construct(Task $model)
     {
         parent::__construct($model);
@@ -35,9 +38,12 @@ class TaskRepository extends BaseRepository implements TaskRepositoryInterface
 
     public function getByAssignee(int $employeeId): Collection
     {
+        // `board.department` is eager-loaded so the employee tasks tab
+        // can render the board name + parent department without an
+        // extra round-trip per row.
         return $this->model
             ->byAssignee($employeeId)
-            ->with(['board', 'column', 'assignees', 'labels'])
+            ->with(['board.department', 'column', 'assignees', 'labels'])
             ->orderByDesc('created_at')
             ->get();
     }
@@ -55,6 +61,10 @@ class TaskRepository extends BaseRepository implements TaskRepositoryInterface
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
         $query = $this->model->with(['board', 'column', 'assignees', 'labels', 'creator']);
+
+        // Access scope — injected by TaskController::index via
+        // __visible_board_ids (derived from BoardService::getVisibleForUser).
+        $this->applyAccessScope($query, $filters);
 
         if (! empty($filters['board_id'])) {
             $query->where('board_id', $filters['board_id']);

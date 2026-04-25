@@ -18,6 +18,9 @@ class StoreLeaveRequestRequest extends FormRequest
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
             'is_half_day' => ['sometimes', 'boolean'],
+            // New canonical field. When set to any half-day variant the
+            // service forces end_date = start_date and total_days = 0.5.
+            'duration_type' => ['sometimes', 'string', 'in:full,first_half,second_half'],
             'reason' => ['required', 'string', 'max:1000'],
             'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:5120'],
         ];

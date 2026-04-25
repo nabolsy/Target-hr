@@ -18,8 +18,11 @@ class Department extends Model
         'company_id',
         'parent_id',
         'name',
+        'name_ar',
+        'code',
         'description',
         'manager_id',
+        'branch_id',
         'status',
     ];
 
@@ -47,9 +50,14 @@ class Department extends Model
         return $this->belongsTo(User::class, 'manager_id');
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(CompanyBranch::class, 'branch_id');
+    }
+
     public function employees(): HasMany
     {
-        return $this->hasMany(User::class, 'department_id');
+        return $this->hasMany(Employee::class, 'department_id');
     }
 
     public function designations(): HasMany
@@ -57,11 +65,30 @@ class Department extends Model
         return $this->hasMany(Designation::class);
     }
 
+    /**
+     * Resolve the employee record backing the manager user, if any.
+     * Useful for department-scoped access helpers that operate on employees
+     * rather than users. Non-breaking — the column still references users.id.
+     */
+    public function managerEmployee(): ?Employee
+    {
+        if (! $this->manager_id) {
+            return null;
+        }
+
+        return Employee::where('user_id', $this->manager_id)->first();
+    }
+
     // Scopes
 
     public function scopeActive($query)
     {
         return $query->where('status', DepartmentStatus::Active);
+    }
+
+    public function scopeInactive($query)
+    {
+        return $query->where('status', DepartmentStatus::Inactive);
     }
 
     public function scopeRoot($query)

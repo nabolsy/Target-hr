@@ -8,8 +8,10 @@ use App\Http\Requests\AdjustmentRequest;
 use App\Http\Requests\CheckInRequest;
 use App\Http\Requests\CheckOutRequest;
 use App\Http\Resources\AttendanceRecordResource;
+use App\Services\Access\PermissionService;
 use App\Services\AttendanceService;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,26 +19,50 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AttendanceController extends Controller
 {
-    public function __construct(private AttendanceService $attendanceService)
-    {
+    public function __construct(
+        private AttendanceService $attendanceService,
+        private PermissionService $permissions,
+    ) {
     }
 
     public function index(Request $request): AnonymousResourceCollection
     {
+        $user = $request->user();
+
+        if (! $this->permissions->can($user, 'attendance.view')) {
+            throw new AuthorizationException('You are not allowed to view attendance records.');
+        }
+
+        $filters = $request->only([
+            'employee_id', 'status', 'date', 'date_from', 'date_to',
+            'shift_id', 'sort_by', 'sort_dir',
+        ]);
+
+        $filters['__visible_employee_ids'] = $this->permissions
+            ->visibleEmployeeIds($user, 'attendance.view');
+
         $records = $this->attendanceService->paginateWithFilters(
-            $request->only([
-                'employee_id', 'status', 'date', 'date_from', 'date_to',
-                'shift_id', 'sort_by', 'sort_dir',
-            ]),
+            $filters,
             $request->integer('per_page', 15)
         );
 
         return AttendanceRecordResource::collection($records);
     }
 
-    public function show(int $attendanceRecord): AttendanceRecordResource
+    public function show(Request $request, int $attendanceRecord): AttendanceRecordResource
     {
         $record = $this->attendanceService->findOrFail($attendanceRecord);
+
+        $user = $request->user();
+        if (! $this->permissions->can($user, 'attendance.view')) {
+            throw new AuthorizationException('You are not allowed to view this attendance record.');
+        }
+
+        $visible = $this->permissions->visibleEmployeeIds($user, 'attendance.view');
+        if ($visible !== null && ! in_array((int) $record->employee_id, $visible, true)) {
+            throw new AuthorizationException('This attendance record is outside your scope.');
+        }
+
         $record->load(['employee', 'shift', 'adjustmentRequests']);
 
         return new AttendanceRecordResource($record);

@@ -13,6 +13,15 @@ class UpdateAnnouncementRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Mirror StoreAnnouncementRequest — auto-fill company_id when
+        // the FE doesn't thread it through an edit payload.
+        if (! $this->has('company_id') && $this->user()) {
+            $this->merge(['company_id' => $this->user()->company_id]);
+        }
+    }
+
     public function rules(): array
     {
         return [

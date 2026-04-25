@@ -18,6 +18,7 @@ class BoardColumn extends Model
         'color',
         'wip_limit',
         'is_done_column',
+        'archived_at',
     ];
 
     protected function casts(): array
@@ -26,7 +27,18 @@ class BoardColumn extends Model
             'sort_order' => 'integer',
             'wip_limit' => 'integer',
             'is_done_column' => 'boolean',
+            'archived_at' => 'datetime',
         ];
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->whereNull('archived_at');
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->whereNotNull('archived_at');
     }
 
     // Relationships

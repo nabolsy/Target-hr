@@ -39,6 +39,15 @@ class DocumentResource extends JsonResource
         ];
     }
 
+    /**
+     * Pre-computed download URL when the storage disk supports signed
+     * temporary URLs (S3 / GCS). For drivers that don't (the local
+     * disk), we return null and let the FE fetch via the authenticated
+     * `/documents/{id}/download` endpoint instead — that endpoint
+     * streams the file inline. Returning the API route here directly
+     * caused "Route [login] not defined" when the FE opened it in a
+     * new tab without the bearer header.
+     */
     private function generateDownloadUrl(): ?string
     {
         try {
@@ -47,8 +56,7 @@ class DocumentResource extends JsonResource
                 now()->addMinutes(15)
             );
         } catch (\RuntimeException) {
-            // Driver does not support temporary URLs (e.g. local disk without URL generation)
-            return route('api.v1.documents.download', $this->id);
+            return null;
         }
     }
 }

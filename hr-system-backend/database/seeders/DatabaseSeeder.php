@@ -2,24 +2,60 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call([
+            // Foundation
+            CompanySeeder::class,
+            RolePermissionSeeder::class,
+            // Role Access Matrix — the single source of truth for the
+            // 9 scoped roles and 30 permissions defined in
+            // config/role_access.php. Runs after RolePermissionSeeder
+            // so it additively extends any permissions already seeded.
+            RoleAccessMatrixSeeder::class,
+            DepartmentSeeder::class,
+            DesignationSeeder::class,
+            ShiftSeeder::class,
+            HolidaySeeder::class,
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            // Users & Employees
+            UserEmployeeSeeder::class,
+
+            // Core HR modules
+            AttendanceSeeder::class,
+            LeaveSeeder::class,
+            DocumentSeeder::class,
+            SalaryPayrollSeeder::class,
+
+            // Task management
+            TaskBoardSeeder::class,
+
+            // Announcements
+            AnnouncementSeeder::class,
+
+            // Performance
+            PerformanceSeeder::class,
+
+            // Recruitment & Onboarding
+            RecruitmentSeeder::class,
+            OnboardingSeeder::class,
+
+            // Assets
+            AssetSeeder::class,
+
+            // System logs
+            NotificationSeeder::class,
+            AuditLogSeeder::class,
+
+            // SaaS Plans & Subscriptions
+            PlanSeeder::class,
         ]);
     }
 }

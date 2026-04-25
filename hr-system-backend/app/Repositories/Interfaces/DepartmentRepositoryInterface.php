@@ -16,4 +16,6 @@ interface DepartmentRepositoryInterface extends BaseRepositoryInterface
     public function getSubDepartments(int $parentId): Collection;
 
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator;
+
+    public function getTree(int $companyId): Collection;
 }

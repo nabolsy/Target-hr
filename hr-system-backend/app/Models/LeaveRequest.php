@@ -21,6 +21,7 @@ class LeaveRequest extends Model
         'start_date',
         'end_date',
         'is_half_day',
+        'duration_type',
         'total_days',
         'reason',
         'attachment_path',

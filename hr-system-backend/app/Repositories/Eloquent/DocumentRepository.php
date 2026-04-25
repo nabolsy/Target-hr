@@ -5,12 +5,15 @@ namespace App\Repositories\Eloquent;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
 use App\Models\EmployeeDocument;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\DocumentRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class DocumentRepository extends BaseRepository implements DocumentRepositoryInterface
 {
+    use AppliesAccessScope;
+
     public function __construct(EmployeeDocument $model)
     {
         parent::__construct($model);
@@ -42,6 +45,9 @@ class DocumentRepository extends BaseRepository implements DocumentRepositoryInt
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
         $query = $this->model->query();
+
+        // Access scope (employee subset filter from PermissionService).
+        $this->applyAccessScope($query, $filters);
 
         if (! empty($filters['employee_id'])) {
             $query->where('employee_id', $filters['employee_id']);

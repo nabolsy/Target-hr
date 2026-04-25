@@ -67,14 +67,14 @@ class OnboardingChecklistController extends Controller
         return new OnboardingChecklistResource($onboardingChecklist);
     }
 
-    public function completeItem(CompleteChecklistItemRequest $request, OnboardingChecklistItem $checklistItem): OnboardingChecklistItemResource
+    public function completeItem(CompleteChecklistItemRequest $request, OnboardingChecklistItem $item): OnboardingChecklistItemResource
     {
-        $item = $this->onboardingService->completeItem(
-            $checklistItem->id,
+        $completed = $this->onboardingService->completeItem(
+            $item->id,
             $request->validated('notes')
         );
 
-        return new OnboardingChecklistItemResource($item->load(['assignedTo', 'completedBy']));
+        return new OnboardingChecklistItemResource($completed->load(['assignedTo', 'completedBy']));
     }
 
     public function getByEmployee(Request $request, int $employeeId): AnonymousResourceCollection
@@ -84,10 +84,10 @@ class OnboardingChecklistController extends Controller
         return OnboardingChecklistResource::collection($checklists);
     }
 
-    public function completeOffboarding(OnboardingChecklist $onboardingChecklist): OnboardingChecklistResource
+    public function completeOffboarding(OnboardingChecklist $checklist): OnboardingChecklistResource
     {
-        $checklist = $this->onboardingService->completeOffboarding($onboardingChecklist->id);
+        $result = $this->onboardingService->completeOffboarding($checklist->id);
 
-        return new OnboardingChecklistResource($checklist->load(['items', 'employee']));
+        return new OnboardingChecklistResource($result->load(['items', 'employee']));
     }
 }

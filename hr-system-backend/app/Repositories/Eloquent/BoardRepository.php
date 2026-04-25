@@ -37,9 +37,13 @@ class BoardRepository extends BaseRepository implements BoardRepositoryInterface
     public function getWithColumns(int $boardId): Model
     {
         return $this->model
-            ->with(['columns.tasks' => function ($query) {
-                $query->orderBy('sort_order');
-            }, 'columns.tasks.assignees', 'columns.tasks.labels'])
+            ->with([
+                'columns' => fn ($q) => $q->whereNull('archived_at')->orderBy('sort_order'),
+                'columns.tasks' => fn ($q) => $q->orderBy('sort_order'),
+                'columns.tasks.assignees',
+                'columns.tasks.labels',
+                'members',
+            ])
             ->withCount('tasks')
             ->findOrFail($boardId);
     }

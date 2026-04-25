@@ -14,6 +14,34 @@ class AnnouncementRepository extends BaseRepository implements AnnouncementRepos
         parent::__construct($model);
     }
 
+    /**
+     * Announcement scope filter is custom: a user sees any announcement
+     * whose department_id is NULL (company-wide, visible to everyone) OR
+     * whose department_id is in their visible-departments set.
+     *
+     * This differs from the generic AppliesAccessScope trait because
+     * NULL means "visible to all" for this model, whereas the trait
+     * treats NULL as "no filter".
+     *
+     * @param  array<int>|null  $visibleDepartmentIds  null → no restriction
+     */
+    protected function applyAnnouncementScope($query, ?array $visibleDepartmentIds): void
+    {
+        if ($visibleDepartmentIds === null) {
+            return; // company scope
+        }
+
+        if (empty($visibleDepartmentIds)) {
+            $query->whereNull('department_id'); // only company-wide
+            return;
+        }
+
+        $query->where(function ($q) use ($visibleDepartmentIds) {
+            $q->whereNull('department_id')
+              ->orWhereIn('department_id', $visibleDepartmentIds);
+        });
+    }
+
     public function getPublished(): Collection
     {
         return $this->model->query()
@@ -40,6 +68,12 @@ class AnnouncementRepository extends BaseRepository implements AnnouncementRepos
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
         $query = $this->model->query();
+
+        // Access scope: NULL department_id = visible to everyone.
+        if (array_key_exists('__visible_department_ids', $filters)) {
+            $this->applyAnnouncementScope($query, $filters['__visible_department_ids']);
+            unset($filters['__visible_department_ids']);
+        }
 
         if (! empty($filters['company_id'])) {
             $query->where('company_id', $filters['company_id']);

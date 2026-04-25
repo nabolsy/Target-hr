@@ -3,12 +3,15 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\AttendanceRecord;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\AttendanceRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class AttendanceRepository extends BaseRepository implements AttendanceRepositoryInterface
 {
+    use AppliesAccessScope;
+
     public function __construct(AttendanceRecord $model)
     {
         parent::__construct($model);
@@ -43,6 +46,9 @@ class AttendanceRepository extends BaseRepository implements AttendanceRepositor
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
         $query = $this->model->query()->with(['employee', 'shift']);
+
+        // Access scope (employee subset filter from PermissionService).
+        $this->applyAccessScope($query, $filters);
 
         if (! empty($filters['employee_id'])) {
             $query->where('employee_id', $filters['employee_id']);

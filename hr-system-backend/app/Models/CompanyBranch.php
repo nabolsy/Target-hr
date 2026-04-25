@@ -6,6 +6,8 @@ use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CompanyBranch extends Model
@@ -15,6 +17,7 @@ class CompanyBranch extends Model
     protected $fillable = [
         'company_id',
         'name',
+        'name_ar',
         'address',
         'city',
         'state',
@@ -22,6 +25,7 @@ class CompanyBranch extends Model
         'postal_code',
         'phone',
         'email',
+        'manager_id',
         'is_headquarters',
         'is_active',
     ];
@@ -34,7 +38,20 @@ class CompanyBranch extends Model
         ];
     }
 
-    // Scopes
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'manager_id');
+    }
+
+    public function departments(): HasMany
+    {
+        return $this->hasMany(Department::class, 'branch_id');
+    }
+
+    public function employees(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'branch_id');
+    }
 
     public function scopeActive(Builder $query): Builder
     {

@@ -22,6 +22,7 @@ class StoreEmployeeRequest extends FormRequest
             'user_id' => ['nullable', 'integer', 'exists:users,id', 'unique:employees,user_id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'designation_id' => ['nullable', 'integer', 'exists:designations,id'],
+            'branch_id' => ['nullable', 'integer', 'exists:company_branches,id'],
             'manager_id' => ['nullable', 'integer', 'exists:employees,id'],
             'employee_id_number' => ['required', 'string', 'max:50'],
             'first_name' => ['required', 'string', 'max:255'],

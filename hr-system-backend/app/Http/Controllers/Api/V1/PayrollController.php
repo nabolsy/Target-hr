@@ -42,9 +42,15 @@ class PayrollController extends Controller
             ->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function showPeriod(PayrollPeriod $payrollPeriod): PayrollPeriodResource
+    public function show(PayrollPeriod $payrollPeriod): PayrollPeriodResource
     {
-        $payrollPeriod->load('records.employee');
+        // Eager-load everything the frontend tabs need in one trip:
+        // records with their employee + department so the Overview,
+        // Runs, and Payslips tabs can render without per-row queries.
+        $payrollPeriod->load([
+            'records.employee:id,first_name,last_name,email,employee_id_number,department_id,company_id',
+            'records.employee.department:id,name',
+        ]);
 
         return new PayrollPeriodResource($payrollPeriod);
     }

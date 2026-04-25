@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\NotificationSent;
 use App\Models\NotificationLog;
 use App\Models\User;
 use Illuminate\Notifications\Notification;
@@ -15,7 +16,7 @@ class NotificationService
 
         $data = method_exists($notification, 'toArray') ? $notification->toArray($user) : [];
 
-        NotificationLog::create([
+        $log = NotificationLog::create([
             'company_id' => $user->company_id,
             'user_id' => $user->id,
             'type' => $data['type'] ?? class_basename($notification),
@@ -23,6 +24,13 @@ class NotificationService
             'body' => $data['message'] ?? null,
             'data' => $data,
         ]);
+
+        // Push the same row over the user's private channel so the SPA
+        // can prepend it to its list and bump the unread badge without
+        // re-polling. Broadcasting falls back to the configured driver
+        // (`null` in tests, `log` in dev, `reverb` once configured) so
+        // this is safe to call unconditionally.
+        broadcast(new NotificationSent($log));
     }
 
     public function getForUser(int $userId, int $perPage = 15): LengthAwarePaginator

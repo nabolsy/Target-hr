@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AssetCategory;
 use App\Enums\AssetCondition;
 use App\Enums\AssetStatus;
 use App\Traits\Auditable;
@@ -35,6 +36,7 @@ class Asset extends Model
     protected function casts(): array
     {
         return [
+            'category' => AssetCategory::class,
             'condition' => AssetCondition::class,
             'status' => AssetStatus::class,
             'purchase_date' => 'date',

@@ -10,6 +10,7 @@ readonly class BoardDTO
         public ?int $companyId = null,
         public ?string $name = null,
         public ?string $description = null,
+        public ?string $color = null,
         public ?int $departmentId = null,
         public ?BoardType $type = null,
         public ?bool $isArchived = null,
@@ -23,7 +24,8 @@ readonly class BoardDTO
             companyId: $data['company_id'] ?? null,
             name: $data['name'] ?? null,
             description: $data['description'] ?? null,
-            departmentId: $data['department_id'] ?? null,
+            color: $data['color'] ?? null,
+            departmentId: array_key_exists('department_id', $data) ? $data['department_id'] : null,
             type: isset($data['type']) ? BoardType::from($data['type']) : null,
             isArchived: $data['is_archived'] ?? null,
             createdBy: $data['created_by'] ?? null,
@@ -32,14 +34,22 @@ readonly class BoardDTO
 
     public function toArray(): array
     {
-        return array_filter([
+        // department_id is kept explicitly so callers can blank it out
+        // (null = company-wide). array_filter drops nulls, which would
+        // prevent "make this board company-wide" from working, so we
+        // build the array manually and only drop true nulls for fields
+        // other than department_id when it was explicitly set.
+        $out = [
             'company_id' => $this->companyId,
             'name' => $this->name,
             'description' => $this->description,
+            'color' => $this->color,
             'department_id' => $this->departmentId,
             'type' => $this->type?->value,
             'is_archived' => $this->isArchived,
             'created_by' => $this->createdBy,
-        ], fn ($value) => $value !== null);
+        ];
+
+        return array_filter($out, fn ($value) => $value !== null);
     }
 }

@@ -10,6 +10,7 @@ use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -21,6 +22,7 @@ class Employee extends Model
         'company_id',
         'user_id',
         'department_id',
+        'branch_id',
         'designation_id',
         'manager_id',
         'employee_id_number',
@@ -84,9 +86,34 @@ class Employee extends Model
         return $this->belongsTo(Department::class);
     }
 
+    /**
+     * All department memberships via the employee_department pivot.
+     *
+     * The primary membership is mirrored from the department_id column by
+     * EmployeeObserver. Reads continue to use department_id directly for
+     * speed; this relation exists for historical lookups and for future
+     * multi-department membership without a schema rewrite.
+     */
+    public function departments(): BelongsToMany
+    {
+        return $this->belongsToMany(Department::class, 'employee_department')
+            ->withPivot(['is_primary', 'start_date', 'end_date', 'role'])
+            ->withTimestamps();
+    }
+
+    public function primaryDepartments(): BelongsToMany
+    {
+        return $this->departments()->wherePivot('is_primary', true);
+    }
+
     public function designation(): BelongsTo
     {
         return $this->belongsTo(Designation::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(CompanyBranch::class, 'branch_id');
     }
 
     public function manager(): BelongsTo
@@ -114,9 +141,17 @@ class Employee extends Model
         return $this->hasMany(Document::class);
     }
 
-    public function tasks(): HasMany
+    /**
+     * Tasks the employee is assigned to. Uses the task_assignees pivot
+     * (a task can have multiple assignees and an employee can own
+     * multiple tasks) — Task::assignees() is the mirror side.
+     *
+     * The old hasMany declaration was wrong because tasks.employee_id
+     * doesn't exist — assignments live on the pivot.
+     */
+    public function tasks(): BelongsToMany
     {
-        return $this->hasMany(Task::class);
+        return $this->belongsToMany(Task::class, 'task_assignees');
     }
 
     // Scopes

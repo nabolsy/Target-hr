@@ -91,19 +91,107 @@ class AttendanceService extends BaseService
         });
     }
 
-    public function getMonthlyReport(int $employeeId, int $month, int $year): Collection
-    {
-        return $this->attendanceRepository->getMonthlyRecords($employeeId, $month, $year);
-    }
-
     public function getTodayRecords(int $companyId): Collection
     {
-        return $this->attendanceRepository->getTodayRecords($companyId);
+        $records = $this->attendanceRepository->getTodayRecords($companyId);
+        $this->overlayApprovedLeaves($records->all());
+
+        return $records;
     }
 
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
-        return $this->attendanceRepository->paginateWithFilters($filters, $perPage);
+        $page = $this->attendanceRepository->paginateWithFilters($filters, $perPage);
+
+        // Read-time defence-in-depth: LeaveService::approveLeave already
+        // writes attendance rows with status='on_leave' at approval
+        // time, but that hook can miss edge cases (historical approvals
+        // from before the hook existed, manual attendance edits, direct
+        // DB imports). We overlay approved leaves onto the returned
+        // records so the attendance list is never out of sync with the
+        // leave module — but we don't persist the change, so the DB
+        // remains the write-time source of truth.
+        $this->overlayApprovedLeaves($page->items());
+
+        return $page;
+    }
+
+    public function getMonthlyReport(int $employeeId, int $month, int $year): Collection
+    {
+        $records = $this->attendanceRepository->getMonthlyRecords($employeeId, $month, $year);
+        $this->overlayApprovedLeaves($records->all());
+
+        return $records;
+    }
+
+    /**
+     * For each attendance record, check whether the employee has an
+     * approved LeaveRequest that covers its date. If yes and the record
+     * isn't already marked 'on_leave', mutate the in-memory status to
+     * 'on_leave' so the serializer surfaces the right label.
+     *
+     * Runs at most one SQL query (WHERE employee_id IN + date range)
+     * and does all the matching in PHP. O(n) in the number of records
+     * returned, which is capped by the paginator's per-page limit.
+     */
+    protected function overlayApprovedLeaves(array $records): void
+    {
+        if (empty($records)) {
+            return;
+        }
+
+        $employeeIds = [];
+        $minDate = null;
+        $maxDate = null;
+        foreach ($records as $record) {
+            if (! $record || ! $record->date) continue;
+            $employeeIds[$record->employee_id] = true;
+            $dateStr = $record->date instanceof Carbon
+                ? $record->date->toDateString()
+                : (string) $record->date;
+            if ($minDate === null || $dateStr < $minDate) $minDate = $dateStr;
+            if ($maxDate === null || $dateStr > $maxDate) $maxDate = $dateStr;
+        }
+
+        if (empty($employeeIds) || $minDate === null) {
+            return;
+        }
+
+        // One batched query for all approved leaves that could overlap
+        // any of the returned attendance rows.
+        $leaves = \App\Models\LeaveRequest::query()
+            ->where('status', 'approved')
+            ->whereIn('employee_id', array_keys($employeeIds))
+            ->whereDate('end_date', '>=', $minDate)
+            ->whereDate('start_date', '<=', $maxDate)
+            ->get(['employee_id', 'start_date', 'end_date']);
+
+        if ($leaves->isEmpty()) {
+            return;
+        }
+
+        // Build a quick-lookup map: "employee_id:Y-m-d" → true
+        $leaveDays = [];
+        foreach ($leaves as $leave) {
+            $start = Carbon::parse($leave->start_date);
+            $end = Carbon::parse($leave->end_date);
+            for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
+                $leaveDays[$leave->employee_id . ':' . $cursor->toDateString()] = true;
+            }
+        }
+
+        foreach ($records as $record) {
+            if (! $record) continue;
+            $dateStr = $record->date instanceof Carbon
+                ? $record->date->toDateString()
+                : (string) $record->date;
+            $key = $record->employee_id . ':' . $dateStr;
+            if (! isset($leaveDays[$key])) continue;
+            if ($record->status === AttendanceStatus::OnLeave) continue;
+            // Mutate in memory only — no save() — so the DB stays
+            // unchanged and the resource sees the new status.
+            $record->status = AttendanceStatus::OnLeave;
+        }
     }
 
     public function requestAdjustment(array $data): AttendanceAdjustmentRequest

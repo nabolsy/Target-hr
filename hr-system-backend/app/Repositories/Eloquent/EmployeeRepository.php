@@ -3,12 +3,14 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Employee;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\EmployeeRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class EmployeeRepository extends BaseRepository implements EmployeeRepositoryInterface
 {
+    use AppliesAccessScope;
     public function __construct(Employee $model)
     {
         parent::__construct($model);
@@ -31,7 +33,15 @@ class EmployeeRepository extends BaseRepository implements EmployeeRepositoryInt
 
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
-        $query = $this->model->query();
+        $query = $this->model->query()->with([
+            'department:id,name',
+            'designation:id,name,name_ar,grade,level,department_id',
+            'branch:id,name,name_ar,city,country',
+        ]);
+
+        // Access scope (department / employee / self filters) from the
+        // PermissionService-driven private filter keys.
+        $this->applyAccessScope($query, $filters);
 
         if (! empty($filters['company_id'])) {
             $query->where('company_id', $filters['company_id']);

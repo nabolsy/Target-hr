@@ -3,12 +3,14 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Department;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\DepartmentRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class DepartmentRepository extends BaseRepository implements DepartmentRepositoryInterface
 {
+    use AppliesAccessScope;
     public function __construct(Department $model)
     {
         parent::__construct($model);
@@ -38,6 +40,11 @@ class DepartmentRepository extends BaseRepository implements DepartmentRepositor
     {
         $query = $this->model->query();
 
+        // Access scope: for Department itself, "visible department IDs" maps
+        // to the table's own `id` column (not a foreign key). We pass the
+        // `department` column override so the trait filters on `id`.
+        $this->applyAccessScope($query, $filters, ['department' => 'departments.id']);
+
         if (! empty($filters['company_id'])) {
             $query->where('company_id', $filters['company_id']);
         }
@@ -65,6 +72,28 @@ class DepartmentRepository extends BaseRepository implements DepartmentRepositor
         $sortDir = $filters['sort_dir'] ?? 'desc';
         $query->orderBy($sortBy, $sortDir);
 
-        return $query->with(['parent', 'manager'])->withCount('children', 'employees')->paginate($perPage);
+        return $query->with(['parent', 'manager', 'branch'])->withCount('children', 'employees')->paginate($perPage);
+    }
+
+    /**
+     * Return the full department hierarchy for a company as root nodes with
+     * eager-loaded descendants (2 levels deep by default). Used by the
+     * /departments/tree endpoint on the frontend.
+     */
+    public function getTree(int $companyId): Collection
+    {
+        return $this->model
+            ->where('company_id', $companyId)
+            ->whereNull('parent_id')
+            ->with([
+                'manager',
+                'branch',
+                'children.manager',
+                'children.branch',
+                'children.children.manager',
+            ])
+            ->withCount('employees')
+            ->orderBy('name')
+            ->get();
     }
 }

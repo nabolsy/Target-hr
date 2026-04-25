@@ -13,10 +13,19 @@ class StoreAnnouncementRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Multi-tenant default: an announcement is always scoped to
+        // the author's company, so auto-fill it server-side.
+        if (! $this->has('company_id') && $this->user()) {
+            $this->merge(['company_id' => $this->user()->company_id]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'company_id' => ['required', 'integer', 'exists:companies,id'],
+            'company_id' => ['sometimes', 'required', 'integer', 'exists:companies,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'title' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string', 'max:65535'],

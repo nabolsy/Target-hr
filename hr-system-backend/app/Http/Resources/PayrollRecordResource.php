@@ -9,7 +9,17 @@ class PayrollRecordResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $canViewSalary = auth()->check() && auth()->user()->can('view_salary');
+        // Use PermissionService::can so the "full company access"
+        // bypass for Super Admin / Company Admin is honoured without
+        // needing an explicit Spatie grant. Anyone with payroll.view
+        // at any scope (HR Manager, Payroll Officer, …) also sees
+        // salary figures — they're the people who need them.
+        $viewer = auth()->user();
+        $canViewSalary = false;
+        if ($viewer) {
+            $canViewSalary = app(\App\Services\Access\PermissionService::class)
+                ->can($viewer, 'payroll.view');
+        }
 
         $data = [
             'id' => $this->id,

@@ -4,12 +4,15 @@ namespace App\Repositories\Eloquent;
 
 use App\Enums\LeaveRequestStatus;
 use App\Models\LeaveRequest;
+use App\Repositories\Concerns\AppliesAccessScope;
 use App\Repositories\Interfaces\LeaveRequestRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class LeaveRequestRepository extends BaseRepository implements LeaveRequestRepositoryInterface
 {
+    use AppliesAccessScope;
+
     public function __construct(LeaveRequest $model)
     {
         parent::__construct($model);
@@ -36,6 +39,9 @@ class LeaveRequestRepository extends BaseRepository implements LeaveRequestRepos
     public function paginateWithFilters(array $filters, int $perPage = 15): LengthAwarePaginator
     {
         $query = $this->model->with(['employee', 'leaveType', 'approver']);
+
+        // Access scope (employee subset filter from PermissionService).
+        $this->applyAccessScope($query, $filters);
 
         if (! empty($filters['employee_id'])) {
             $query->where('employee_id', $filters['employee_id']);

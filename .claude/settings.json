@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv 2026_04_05_003118_create_companies_table.php 2026_04_05_100001_create_companies_table.php)",
+      "Bash(mv 2026_04_05_003310_add_company_fields_to_users_table.php 2026_04_05_100002_add_company_fields_to_users_table.php)",
+      "Bash(mv 2026_04_05_003655_create_permission_tables.php 2026_04_05_100003_create_permission_tables.php)",
+      "Bash(mv 2026_04_05_003758_create_departments_table.php 2026_04_05_100010_create_departments_table.php)",
+      "Bash(mv 2026_04_05_003758_create_designations_table.php 2026_04_05_100011_create_designations_table.php)",
+      "Bash(php artisan:*)",
+      "Bash(find /home/bolsy/Joins/Target/BE/hr-system-backend/app/Enums -name \"*.php\" -exec echo \"=== {} ===\" \\\\; -exec cat {} \\\\;)",
+      "Bash(curl -s -o /dev/null -w 'Preflight HTTP %{http_code}\\\\n' -X OPTIONS http://localhost:8000/api/v1/auth/login -H 'Origin: http://localhost:3001' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type,Accept')",
+      "Bash(curl -s -D - http://localhost:8000/api/v1/auth/login -X POST -H 'Origin: http://localhost:3001' -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"admin@acme.com\",\"password\":\"password\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/login -X POST -H 'Origin: http://localhost:3001' -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"admin@acme.com\",\"password\":\"password\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code}' -X OPTIONS http://localhost:8000/api/v1/login -H 'Origin: http://localhost:3001' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type,Accept')",
+      "Bash(ls /home/bolsy/Joins/Target/BE/hr-system-backend/database/migrations/*personal_access_tokens*)",
+      "Bash(pkill -f \"artisan serve\")",
+      "Bash(curl -sv http://localhost:8000/api/v1/login -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"hr@acme.com\",\"password\":\"password\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/auth/login -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"hr@acme.com\",\"password\":\"password\"}')",
+      "Bash(python3 -c ':*)"
+    ]
+  }
+}

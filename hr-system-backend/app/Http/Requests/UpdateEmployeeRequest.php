@@ -24,6 +24,7 @@ class UpdateEmployeeRequest extends FormRequest
             'user_id' => ['nullable', 'integer', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($employeeId)],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'designation_id' => ['nullable', 'integer', 'exists:designations,id'],
+            'branch_id' => ['nullable', 'integer', 'exists:company_branches,id'],
             'manager_id' => ['nullable', 'integer', 'exists:employees,id', "not_in:{$employeeId}"],
             'employee_id_number' => ['sometimes', 'required', 'string', 'max:50'],
             'first_name' => ['sometimes', 'required', 'string', 'max:255'],

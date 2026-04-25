@@ -17,6 +17,7 @@ class BoardColumnResource extends JsonResource
             'color' => $this->color,
             'wip_limit' => $this->wip_limit,
             'is_done_column' => $this->is_done_column,
+            'archived_at' => $this->archived_at?->toISOString(),
             'tasks' => TaskResource::collection($this->whenLoaded('tasks')),
             'tasks_count' => $this->when(isset($this->tasks_count), $this->tasks_count),
             'created_at' => $this->created_at?->toISOString(),

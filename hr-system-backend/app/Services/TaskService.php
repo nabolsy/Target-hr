@@ -53,12 +53,19 @@ class TaskService extends BaseService
 
             $task = $this->taskRepository->create($data);
 
-            // Assign assignees if provided
+            // Assign assignees if provided. We fire one TaskAssigned per
+            // assignee so the listener can notify each user — bulk
+            // create previously fired no event, leaving brand-new
+            // assignees with no notification.
             if (! empty($dto->assigneeIds)) {
                 $task->assignees()->attach($dto->assigneeIds, [
                     'assigned_by' => auth()->id(),
                     'assigned_at' => now(),
                 ]);
+                $newAssignees = Employee::whereIn('id', $dto->assigneeIds)->get();
+                foreach ($newAssignees as $emp) {
+                    event(new TaskAssigned($task, $emp));
+                }
             }
 
             // Attach labels if provided
@@ -76,11 +83,22 @@ class TaskService extends BaseService
             $task = $this->taskRepository->update($taskId, $dto->toArray());
 
             if ($dto->assigneeIds !== null) {
+                // Capture who's already on the task BEFORE sync so we
+                // only notify the diff — not every existing assignee
+                // each time someone edits the description.
+                $before = $task->assignees()->pluck('employees.id')->all();
                 $task->assignees()->sync(
                     collect($dto->assigneeIds)->mapWithKeys(fn ($id) => [
                         $id => ['assigned_by' => auth()->id(), 'assigned_at' => now()],
                     ])->all()
                 );
+                $newlyAdded = array_values(array_diff($dto->assigneeIds, $before));
+                if (! empty($newlyAdded)) {
+                    $newAssignees = Employee::whereIn('id', $newlyAdded)->get();
+                    foreach ($newAssignees as $emp) {
+                        event(new TaskAssigned($task, $emp));
+                    }
+                }
             }
 
             if ($dto->labelIds !== null) {
