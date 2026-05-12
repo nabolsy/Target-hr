@@ -11,6 +11,7 @@ use App\Http\Requests\UpdateTaskRequest;
 use App\Http\Resources\TaskCommentResource;
 use App\Http\Resources\TaskResource;
 use App\Models\Task;
+use App\Models\TaskComment;
 use App\Services\Access\PermissionService;
 use App\Services\BoardService;
 use App\Services\TaskService;
@@ -75,7 +76,11 @@ class TaskController extends Controller
 
         $task->load([
             'assignees', 'labels', 'column', 'creator', 'board',
-            'comments.user', 'attachments', 'checklists.items',
+            'comments' => function ($q) {
+                $q->whereNull('parent_id')->orderBy('created_at');
+            },
+            'comments.user', 'comments.replies.user',
+            'attachments', 'checklists.items',
         ]);
 
         return new TaskResource($task);
@@ -135,15 +140,41 @@ class TaskController extends Controller
         return new TaskResource($result);
     }
 
+    public function listComments(Task $task): AnonymousResourceCollection
+    {
+        $this->authorize('view', $task);
+
+        $comments = $this->taskService->listComments($task->id);
+
+        return TaskCommentResource::collection($comments);
+    }
+
     public function addComment(StoreTaskCommentRequest $request, Task $task): JsonResponse
     {
         $this->authorize('comment', $task);
 
-        $comment = $this->taskService->addComment($task->id, $request->validated('body'));
+        $comment = $this->taskService->addComment(
+            $task->id,
+            $request->validated('body'),
+            $request->input('parent_id') ? (int) $request->input('parent_id') : null,
+        );
 
         return (new TaskCommentResource($comment))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    public function deleteComment(Task $task, TaskComment $comment): JsonResponse
+    {
+        if ((int) $comment->task_id !== (int) $task->id) {
+            return response()->json(['message' => 'Comment does not belong to this task.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->authorize('deleteComment', [$task, $comment]);
+
+        $this->taskService->deleteComment($comment->id);
+
+        return response()->json(['message' => 'Comment deleted.'], Response::HTTP_OK);
     }
 
     public function myTasks(Request $request): AnonymousResourceCollection

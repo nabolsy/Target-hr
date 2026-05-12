@@ -186,7 +186,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('tasks/{task}/assign', [TaskController::class, 'assign'])->name('tasks.assign');
     Route::delete('tasks/{task}/assignees/{employee}', [TaskController::class, 'removeAssignee'])
         ->name('tasks.remove-assignee');
+    Route::get('tasks/{task}/comments', [TaskController::class, 'listComments'])->name('tasks.list-comments');
     Route::post('tasks/{task}/comments', [TaskController::class, 'addComment'])->name('tasks.add-comment');
+    Route::delete('tasks/{task}/comments/{comment}', [TaskController::class, 'deleteComment'])->name('tasks.delete-comment');
 
     // Task attachments
     Route::get('tasks/{task}/attachments', [\App\Http\Controllers\Api\V1\TaskAttachmentController::class, 'index']);

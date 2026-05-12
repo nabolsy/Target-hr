@@ -177,24 +177,50 @@ class TaskService extends BaseService
         return $task->load(['assignees', 'labels', 'column', 'creator']);
     }
 
-    public function addComment(int $taskId, string $body): TaskComment
+    public function addComment(int $taskId, string $body, ?int $parentId = null): TaskComment
     {
         $this->taskRepository->findOrFail($taskId);
 
         $comment = TaskComment::create([
-            'task_id' => $taskId,
-            'user_id' => auth()->id(),
-            'body' => $body,
+            'task_id'   => $taskId,
+            'user_id'   => auth()->id(),
+            'parent_id' => $parentId,
+            'body'      => $body,
         ]);
 
         TaskActivityLog::create([
-            'task_id' => $taskId,
-            'user_id' => auth()->id(),
-            'action' => 'commented',
-            'description' => 'Added a comment',
+            'task_id'     => $taskId,
+            'user_id'     => auth()->id(),
+            'action'      => $parentId ? 'replied' : 'commented',
+            'description' => $parentId ? 'Replied to a comment' : 'Added a comment',
         ]);
 
         return $comment->load('user');
+    }
+
+    public function deleteComment(int $commentId): void
+    {
+        $comment = TaskComment::findOrFail($commentId);
+
+        TaskActivityLog::create([
+            'task_id'     => $comment->task_id,
+            'user_id'     => auth()->id(),
+            'action'      => 'comment_deleted',
+            'description' => 'Deleted a comment',
+        ]);
+
+        $comment->delete();
+    }
+
+    public function listComments(int $taskId): \Illuminate\Database\Eloquent\Collection
+    {
+        $this->taskRepository->findOrFail($taskId);
+
+        return TaskComment::with(['user', 'replies.user'])
+            ->where('task_id', $taskId)
+            ->whereNull('parent_id')
+            ->orderBy('created_at')
+            ->get();
     }
 
     public function addAttachment(int $taskId, string $filePath, string $fileName, int $fileSize, string $mimeType): TaskAttachment

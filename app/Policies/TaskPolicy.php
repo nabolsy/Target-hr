@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\Board;
 use App\Models\Employee;
 use App\Models\Task;
+use App\Models\TaskComment;
 use App\Models\User;
 use App\Services\Access\PermissionService;
 
@@ -168,9 +169,68 @@ class TaskPolicy
 
     public function comment(User $user, Task $task): bool
     {
-        // Commenting is a light action — anyone who can view the task
-        // can add a comment. Mirrors typical Kanban behavior.
-        return $this->view($user, $task);
+        if ((int) $user->company_id !== (int) $task->company_id) {
+            return false;
+        }
+
+        // Company admins and anyone with board.manage can always
+        // comment — they oversee boards even if they aren't on the
+        // members pivot. Otherwise we require explicit board
+        // membership so plain employees from other departments can't
+        // comment on a board they can technically see.
+        if ($user->role === UserRole::CompanyAdmin) {
+            return true;
+        }
+        if ($this->permissions->can($user, 'board.manage')) {
+            return true;
+        }
+
+        return $this->isBoardMember($user, $task->board_id);
+    }
+
+    public function deleteComment(User $user, Task $task, TaskComment $comment): bool
+    {
+        if ((int) $user->company_id !== (int) $task->company_id) {
+            return false;
+        }
+
+        // Authors can always delete their own comments. Board admins
+        // (anyone with task.update at department-or-company scope on
+        // this board) may moderate.
+        if ((int) $comment->user_id === (int) $user->id) {
+            return true;
+        }
+
+        $scope = $this->permissions->getScope($user, 'task.update');
+        if ($scope === null || $scope === 'self') {
+            return false;
+        }
+        if ($scope === 'company') {
+            return true;
+        }
+
+        return $this->boardInScope($user, $task->board_id, 'task.update');
+    }
+
+    protected function isBoardMember(User $user, ?int $boardId): bool
+    {
+        if (! $boardId) {
+            return false;
+        }
+        $board = Board::find($boardId);
+        if (! $board) {
+            return false;
+        }
+        if ((int) $user->company_id !== (int) $board->company_id) {
+            return false;
+        }
+
+        $employeeId = $this->permissions->employeeIdForSelf($user);
+        if (! $employeeId) {
+            return false;
+        }
+
+        return $board->members()->where('employees.id', $employeeId)->exists();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
