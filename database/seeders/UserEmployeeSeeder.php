@@ -33,6 +33,15 @@ class UserEmployeeSeeder extends Seeder
         $company = Company::first();
         if (! $company) return;
 
+        User::create([
+            'name'              => 'Target Admin',
+            'email'             => 'admin@targetco.io',
+            'password'          => Hash::make('e5c7db31e72932c7'),
+            'company_id'        => $company->id,
+            'role'              => UserRole::CompanyAdmin->value,
+            'email_verified_at' => now(),
+        ]);
+
         $depts  = Department::where('company_id', $company->id)->get()->keyBy('name');
         $desigs = Designation::where('company_id', $company->id)->get()->keyBy('name');
 
@@ -194,7 +203,7 @@ class UserEmployeeSeeder extends Seeder
         foreach ($employees as $emp) {
             $user = User::create([
                 'name'              => "{$emp['first_name']} {$emp['last_name']}",
-                'email'             => "{$emp['email_prefix']}@acme.com",
+                'email'             => "{$emp['email_prefix']}@targetco.io",
                 'password'          => $password,
                 'company_id'        => $company->id,
                 'role'              => $emp['role']->value,
